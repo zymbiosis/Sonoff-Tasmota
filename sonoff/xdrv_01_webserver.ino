@@ -383,20 +383,21 @@ const char HTTP_END[] PROGMEM =
   "</html>";
 
 const char HTTP_DEVICE_CONTROL[] PROGMEM = "<td style='width:%d%%'><button onclick='la(\"&o=%d\");'>%s%s</button></td>";  // ?o is related to WebGetArg("o", tmp, sizeof(tmp));
+const char HTTP_LED_BUTTON[] PROGMEM = "<td style='width:%d%%'><button type='submit' value='%d'>%s%s</button></td>"; 
 const char HTTP_DEVICE_STATE[] PROGMEM = "<td style='width:%d{c}%s;font-size:%dpx'>%s</div></td>";  // {c} = %'><div style='text-align:center;font-weight:
 
 enum ButtonTitle {
   BUTTON_RESTART, BUTTON_RESET_CONFIGURATION,
   BUTTON_MAIN, BUTTON_CONFIGURATION, BUTTON_INFORMATION, BUTTON_FIRMWARE_UPGRADE, BUTTON_CONSOLE,
-  BUTTON_MODULE, BUTTON_WIFI, BUTTON_LOGGING, BUTTON_OTHER, BUTTON_TEMPLATE, BUTTON_BACKUP, BUTTON_RESTORE };
+  BUTTON_MODULE, BUTTON_WIFI, BUTTON_LOGGING, BUTTON_OTHER, BUTTON_TEMPLATE, BUTTON_BACKUP, BUTTON_RESTORE, BUTTON_LED_CONTROL };
 const char kButtonTitle[] PROGMEM =
   D_RESTART "|" D_RESET_CONFIGURATION "|"
   D_MAIN_MENU "|" D_CONFIGURATION "|" D_INFORMATION "|" D_FIRMWARE_UPGRADE "|" D_CONSOLE "|"
-  D_CONFIGURE_MODULE "|" D_CONFIGURE_WIFI"|" D_CONFIGURE_LOGGING "|" D_CONFIGURE_OTHER "|" D_CONFIGURE_TEMPLATE "|" D_BACKUP_CONFIGURATION "|" D_RESTORE_CONFIGURATION;
+  D_CONFIGURE_MODULE "|" D_CONFIGURE_WIFI"|" D_CONFIGURE_LOGGING "|" D_CONFIGURE_OTHER "|" D_CONFIGURE_TEMPLATE "|" D_BACKUP_CONFIGURATION "|" D_RESTORE_CONFIGURATION "|" D_LED_CONTROL;
 const char kButtonAction[] PROGMEM =
   ".|rt|"
   ".|cn|in|up|cs|"
-  "md|wi|lg|co|tp|dl|rs";
+  "md|wi|lg|co|tp|dl|rs|ld";
 const char kButtonConfirm[] PROGMEM = D_CONFIRM_RESTART "|" D_CONFIRM_RESET_CONFIGURATION;
 
 enum CTypes { CT_HTML, CT_PLAIN, CT_XML, CT_JSON, CT_STREAM };
@@ -473,6 +474,7 @@ void StartWebserver(int type, IPAddress ipweb)
       WebServer->on("/cs", HandleConsole);
       WebServer->on("/cm", HandleHttpCommand);
 #ifndef FIRMWARE_MINIMAL
+	  WebServer->on("/ld", HandleLeds);
       WebServer->on("/cn", HandleConfiguration);
       WebServer->on("/md", HandleModuleConfiguration);
       WebServer->on("/wi", HandleWifiConfiguration);
@@ -885,6 +887,7 @@ void HandleRoot(void)
 #ifdef FIRMWARE_MINIMAL
     WSContentSpaceButton(BUTTON_FIRMWARE_UPGRADE);
 #else
+    WSContentButton(BUTTON_LED_CONTROL);
     WSContentSpaceButton(BUTTON_CONFIGURATION);
     WSContentButton(BUTTON_INFORMATION);
     WSContentButton(BUTTON_FIRMWARE_UPGRADE);
@@ -2073,6 +2076,81 @@ void HandleConsoleRefresh(void)
 
   char stmp[8];
   WebGetArg("c2", stmp, sizeof(stmp));
+  if (strlen(stmp)) { counter = atoi(stmp); }
+
+  WSContentBegin(200, CT_PLAIN);
+  WSContentSend_P(PSTR("%d}1%d}1"), web_log_index, reset_web_log_flag);
+  if (!reset_web_log_flag) {
+    counter = 0;
+    reset_web_log_flag = true;
+  }
+  if (counter != web_log_index) {
+    if (!counter) {
+      counter = web_log_index;
+      cflg = false;
+    }
+    do {
+      char* tmp;
+      size_t len;
+      GetLog(counter, &tmp, &len);
+      if (len) {
+        if (len > sizeof(mqtt_data) -2) { len = sizeof(mqtt_data); }
+        char stemp[len +1];
+        strlcpy(stemp, tmp, len);
+        WSContentSend_P(PSTR("%s%s"), (cflg) ? "\n" : "", stemp);
+        cflg = true;
+      }
+      counter++;
+      if (!counter) { counter++; }  // Skip log index 0 as it is not allowed
+    } while (counter != web_log_index);
+  }
+  WSContentSend_P(PSTR("}1"));
+  WSContentEnd();
+}
+
+void HandleLeds(void)
+{
+  if (!HttpCheckPriviledgedAccess()) { return; }
+  
+  if (WebServer->hasArg("ld2")) {      // Command sent
+    HandleLedChange();
+    return;
+  }
+
+  AddLog_P(LOG_LEVEL_DEBUG, S_LOG_HTTP, S_LEDS);
+
+  WSContentStart_P(S_LEDS);
+  WSContentSend_P(HTTP_SCRIPT_ROOT, Settings.web_refresh);
+  WSContentSendStyle();
+
+  char stemp[5];
+
+  WSContentSend_P(PSTR("<form method='get' action='/ld'><input type='hidden' name='ld2' value='1'/>"))
+  WSContentSend_P(HTTP_TABLE100);
+  WSContentSend_P(PSTR("<tr>"));
+  for (uint8_t idx = 1; idx <= 6; idx++) {
+    snprintf_P(stemp, sizeof(stemp), PSTR(" %d"), idx);
+    WSContentSend_P(HTTP_LED_BUTTON, 100 / 6, idx, D_BUTTON_TOGGLE, stemp);
+  }
+  WSContentSend_P(PSTR("</tr></table></form>"));
+    
+  WSContentSpaceButton(BUTTON_MAIN);
+  WSContentStop();
+}
+
+void HandleLedChange(void)
+{
+  bool cflg = true;
+  uint8_t counter = 0;                // Initial start, should never be 0 again
+
+  String svalue = WebServer->arg("ld2");
+  if (svalue.length() && (svalue.length() < INPUT_BUFFER_SIZE)) {
+    AddLog_P2(LOG_LEVEL_INFO, PSTR(D_LOG_COMMAND "%s"), svalue.c_str());
+    ExecuteWebCommand("Scheme " + (char*)svalue.c_str(), SRC_LEDCONTROL);
+  }
+
+  char stmp[8];
+  WebGetArg("ld3", stmp, sizeof(stmp));
   if (strlen(stmp)) { counter = atoi(stmp); }
 
   WSContentBegin(200, CT_PLAIN);

@@ -250,6 +250,7 @@
 #define D_RESET_CONFIGURATION "Reset Configuration"
 #define D_BACKUP_CONFIGURATION "Backup Configuration"
 #define D_RESTORE_CONFIGURATION "Restore Configuration"
+#define D_LED_CONTROL "LED Control"
 #define D_MAIN_MENU "Main Menu"
 
 #define D_MODULE_PARAMETERS "Module parameters"
@@ -355,6 +356,8 @@
 #define D_ENTER_COMMAND "Enter command"
 #define D_ENABLE_WEBLOG_FOR_RESPONSE "Enable weblog 2 if response expected"
 #define D_NEED_USER_AND_PASSWORD "Need user=<username>&password=<password>"
+
+#define D_LEDS "LED Controls"
 
 // xdrv_01_mqtt.ino
 #define D_FINGERPRINT "Verify TLS fingerprint..."

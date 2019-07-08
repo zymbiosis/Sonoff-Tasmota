@@ -56,7 +56,7 @@
 
 #define XDRV_04              4
 
-#define WS2812_SCHEMES       7    // Number of additional WS2812 schemes supported by xdrv_ws2812.ino
+#define WS2812_SCHEMES       9    // Number of additional WS2812 schemes supported by xdrv_ws2812.ino
 
 enum LightCommands {
   CMND_COLOR, CMND_COLORTEMPERATURE, CMND_DIMMER, CMND_LED, CMND_LEDTABLE, CMND_FADE,
