@@ -241,14 +241,17 @@ const char HTTP_SCRIPT_LEDCONTROL[] PROGMEM =
     "x=new XMLHttpRequest();"
     "x.onreadystatechange=function(){"
       "if(x.readyState==4&&x.status==200){"
-        "var s=x.responseText.replace(/{t}/g,\"<table style='width:100%%'>\").replace(/{s}/g,\"<tr><th>\").replace(/{m}/g,\"</th><td>\").replace(/{e}/g,\"</td></tr>\").replace(/{c}/g,\"%%'><div style='text-align:center;font-weight:\");"
-        "eb(t).innerHTML=s;"
+        "var s=x.responseText;"//.replace(/{t}/g,\"<table style='width:100%%'>\").replace(/{s}/g,\"<tr><th>\").replace(/{m}/g,\"</th><td>\").replace(/{e}/g,\"</td></tr>\").replace(/{c}/g,\"%%'><div style='text-align:center;font-weight:\");"
+        "var j=JSON.parse(s);"
+        "if(typeof j.Scheme !== 'undefined')eb('1').innerHTML=j.Scheme;"
+        "if(typeof j.Color !== 'undefined')eb('2').innerHTML=j.Color;"
       "}"
     "};"
     "x.open('GET','/ld?ld2='+t+'&ld3='+c,true);"
     "x.send();"
   "}"
-  "window.onload=ld(1,255);"; //Load up the schemes
+  "window.onload=ld(1,255);" //Load up the schemes
+  "window.onload=ld(2,255);"; //Load up the colors
 
 const char HTTP_HEAD_STYLE1[] PROGMEM =
   "</script>"
@@ -399,8 +402,13 @@ const char HTTP_END[] PROGMEM =
   "</html>";
 
 const char HTTP_DEVICE_CONTROL[] PROGMEM = "<td style='width:%d%%'><button onclick='la(\"&o=%d\");'>%s%s</button></td>";  // ?o is related to WebGetArg("o", tmp, sizeof(tmp));
-const char HTTP_LED_BUTTON[] PROGMEM = "<td style='width:%d%%'><button onclick='ld(%d,%d);'>%s%s</button></td>"; 
+const char HTTP_LED_BUTTON[] PROGMEM = "<td style='width:%d%%'><button onclick='ld(%d,%d);'>%s</button></td>"; 
 const char HTTP_DEVICE_STATE[] PROGMEM = "<td style='width:%d{c}%s;font-size:%dpx'>%s</div></td>";  // {c} = %'><div style='text-align:center;font-weight:
+
+const char kLedScheme[] PROGMEM =
+  "Single Color|Wake Up Seq|Cycle Up|Cycle Down|Random|Clock|Candle|RGB|Christmas|Hannukah|Kwanzaa|Rainbow|Fire|USA";
+const char kLedColor[] PROGMEM =
+  "Red|Green|Blue|Orange|Light Green|Light Blue|Amber|Cyan|Purple|Yellow|Pink|White";
 
 enum ButtonTitle {
   BUTTON_RESTART, BUTTON_RESET_CONFIGURATION,
@@ -2133,19 +2141,32 @@ void HandleLeds(void)
     return;
   }
 
-  AddLog_P(LOG_LEVEL_DEBUG, S_LOG_HTTP, S_LEDS);
+  AddLog_P(LOG_LEVEL_DEBUG, S_LOG_HTTP, S_LED_CONTROL);
 
-  WSContentStart_P(S_LEDS);
+  WSContentStart_P(S_LED_CONTROL);
   WSContentSend_P(HTTP_SCRIPT_LEDCONTROL, Settings.web_refresh);
   WSContentSendStyle();
 
-  char stemp[5];
+  char stemp[20];
 
   WSContentSend_P(HTTP_TABLE100);
-  WSContentSend_P(PSTR("<tr><td><div id='1'></div></td></tr><tr>"));
-  for (uint8_t idx = 1; idx <= 6; idx++) {
-    snprintf_P(stemp, sizeof(stemp), PSTR(" %d"), idx);
-    WSContentSend_P(HTTP_LED_BUTTON, 100 / 6, 1, idx, D_BUTTON_TOGGLE, stemp); //width, type (1= scheme), number, button, text
+  //Schemes
+  WSContentSend_P(PSTR("<tr><td colspan='6'><div id='1'></div></td></tr><tr>"));
+  for (uint8_t idx = 0; idx <= 13; idx++) {
+    WSContentSend_P(HTTP_LED_BUTTON, 100 / 6, 1, idx,  
+      GetTextIndexed(stemp, sizeof(stemp), idx, kLedScheme)); //width, type (1= scheme), number, button, text
+    if ((idx + 1) % 6 == 0) { //At a breaking point
+      WSContentSend_P(PSTR("</tr><tr>"));
+    }
+  }
+  //Colors
+  WSContentSend_P(PSTR("<tr><td colspan='6'><div id='2'></div></td></tr><tr>"));
+  for (uint8_t idx = 1; idx <= 12; idx++) {
+    WSContentSend_P(HTTP_LED_BUTTON, 100 / 6, 2, idx, 
+      GetTextIndexed(stemp, sizeof(stemp), idx - 1, kLedColor)); //width, type (2= color), number, button, text
+    if (idx % 6 == 0) { //At a breaking point
+      WSContentSend_P(PSTR("</tr><tr>"));
+    }
   }
   WSContentSend_P(PSTR("</tr></table>"));
     
@@ -2167,50 +2188,61 @@ void HandleLedChange(void)
   AddLog_P2(LOG_LEVEL_DEBUG, PSTR("LED: LED Type %d, New Value %d"), ld2, ld3);
   
   
-  String svalue;
+  char svalue[128];
   if (ld2 == 1) { //Scheme
-    if (ld3 == 255) { //Getter
-      svalue = "scheme";
-    } else {
-      svalue = strcat((char*)"scheme ", (char*)ld3);
-      AddLog_P2(LOG_LEVEL_INFO, PSTR("%s%s"), "Setting Scheme: ", (char*)ld2);
-      ExecuteWebCommand(strcat((char*)"Scheme ", (char*)ld3), SRC_LEDCONTROL);
+    snprintf_P(svalue, sizeof(svalue), PSTR("%s"), "scheme");
+    if (ld3 != 255) { //Not Getter
+      snprintf_P(svalue, sizeof(svalue), PSTR("%s %d"), svalue, ld3);
+      //svalue = strcat((char*)svalue.c_str(), (char*)ld3);
+      //AddLog_P2(LOG_LEVEL_INFO, PSTR("%s%s"), "Setting Scheme: ", (char*)ld3);
+      //ExecuteWebCommand(strcat((char*)svalue.c_str(), (char*)ld3), SRC_LEDCONTROL);
     }
+  }
+  if (ld2 == 2) { //Color
+  snprintf_P(svalue, sizeof(svalue), PSTR("%s"), "color");
+    if (ld3 != 255) { //Not Getter
+      snprintf_P(svalue, sizeof(svalue), PSTR("%s %d"), svalue, ld3);
+      //svalue = strcat((char*)svalue.c_str(), (char*)ld3);
+      //AddLog_P2(LOG_LEVEL_INFO, PSTR("%s%s"), "Setting Color: ", (char*)ld3);
+      //ExecuteWebCommand(strcat((char*)svalue.c_str(), (char*)ld3), SRC_LEDCONTROL);
+    }
+  }
     
-    uint8_t curridx = web_log_index;
-    if (svalue.length() && (svalue.length() < INPUT_BUFFER_SIZE)) {
-      ExecuteWebCommand((char*)svalue.c_str(), SRC_LEDCONTROL);
+  AddLog_P2(LOG_LEVEL_DEBUG, PSTR("LED: LED Command %s"), svalue);
+  
+  uint8_t curridx = web_log_index;
+  if (strlen(svalue)) {
+    ExecuteWebCommand(svalue, SRC_LEDCONTROL);
 
-      if (web_log_index != curridx) {
-        uint8_t counter = curridx;
-        WSContentSend_P(PSTR("{"));
-        bool cflg = false;
-        do {
-          char* tmp;
-          size_t len;
-          GetLog(counter, &tmp, &len);
-          if (len) {
-            // [14:49:36 MQTT: stat/wemos5/RESULT = {"POWER":"OFF"}] > [{"POWER":"OFF"}]
-            char* JSON = (char*)memchr(tmp, '{', len);
-            if (JSON) { // Is it a JSON message (and not only [15:26:08 MQT: stat/wemos5/POWER = O])
-              size_t JSONlen = len - (JSON - tmp);
-              if (JSONlen > sizeof(mqtt_data)) { JSONlen = sizeof(mqtt_data); }
-              char stemp[JSONlen];
-              strlcpy(stemp, JSON +1, JSONlen -2);
-              WSContentSend_P(PSTR("%s%s"), (cflg) ? "," : "", stemp);
-              cflg = true;
-            }
+    if (web_log_index != curridx) {
+      uint8_t counter = curridx;
+      WSContentSend_P(PSTR("{"));
+      bool cflg = false;
+      do {
+        char* tmp;
+        size_t len;
+        GetLog(counter, &tmp, &len);
+        if (len) {
+          // [14:49:36 MQTT: stat/wemos5/RESULT = {"POWER":"OFF"}] > [{"POWER":"OFF"}]
+          char* JSON = (char*)memchr(tmp, '{', len);
+          if (JSON) { // Is it a JSON message (and not only [15:26:08 MQT: stat/wemos5/POWER = O])
+            size_t JSONlen = len - (JSON - tmp);
+            if (JSONlen > sizeof(mqtt_data)) { JSONlen = sizeof(mqtt_data); }
+            char stemp[JSONlen];
+            strlcpy(stemp, JSON +1, JSONlen -2);
+            WSContentSend_P(PSTR("%s%s"), (cflg) ? "," : "", stemp);
+            cflg = true;
           }
-          counter++;
-          if (!counter) counter++;  // Skip 0 as it is not allowed
-        } while (counter != web_log_index);
-        WSContentSend_P(PSTR("}"));
-      } else {
-        WSContentSend_P(PSTR("{\"" D_RSLT_WARNING "\":\"" D_ENABLE_WEBLOG_FOR_RESPONSE "\"}"));
-      }
+        }
+        counter++;
+        if (!counter) counter++;  // Skip 0 as it is not allowed
+      } while (counter != web_log_index);
+      WSContentSend_P(PSTR("}"));
     } else {
-      WSContentSend_P(PSTR("{\"" D_RSLT_WARNING "\":\"" D_ENTER_COMMAND " cmnd=\"}"));
+      WSContentSend_P(PSTR("{\"" D_RSLT_WARNING "\":\"" D_ENABLE_WEBLOG_FOR_RESPONSE "\"}"));
     }
+  } else {
+    WSContentSend_P(PSTR("{\"" D_RSLT_WARNING "\":\"" D_ENTER_COMMAND " cmnd=\"}"));
   }
   WSContentEnd();
 }

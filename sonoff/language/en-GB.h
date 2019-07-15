@@ -357,8 +357,8 @@
 #define D_ENABLE_WEBLOG_FOR_RESPONSE "Enable weblog 2 if response expected"
 #define D_NEED_USER_AND_PASSWORD "Need user=<username>&password=<password>"
 
-#define D_LEDS "LED Controls"
-
+#define D_LED_SCHEME "Scheme"
+#define D_LED_COLOR "Color"
 // xdrv_01_mqtt.ino
 #define D_FINGERPRINT "Verify TLS fingerprint..."
 #define D_TLS_CONNECT_FAILED_TO "TLS Connect failed to"
